@@ -5,13 +5,13 @@ import time
 
 from modal import build, enter, method
 
-MODEL = os.environ.get("MODEL", "llama3:instruct")
+MODEL = os.environ.get("MODEL", "llama3.2")
 
 def pull(model: str = MODEL):
     subprocess.run(["systemctl", "daemon-reload"])
     subprocess.run(["systemctl", "enable", "ollama"])
     subprocess.run(["systemctl", "start", "ollama"])
-    time.sleep(2)  # 2s, wait for the service to start
+    time.sleep(5)  # 2s, wait for the service to start
     subprocess.run(["ollama", "pull", model], stdout=subprocess.PIPE)
 
 image = (
@@ -19,7 +19,8 @@ image = (
     .debian_slim()
     .apt_install("curl", "systemctl")
     .run_commands( # from https://github.com/ollama/ollama/blob/main/docs/linux.md
-        "curl -L https://ollama.com/download/ollama-linux-amd64 -o /usr/bin/ollama",
+        "curl -L https://ollama.com/download/ollama-linux-amd64.tgz -o ollama-linux-amd64.tgz",
+        "tar -C /usr -xzf ollama-linux-amd64.tgz",
         "chmod +x /usr/bin/ollama",
         "useradd -r -s /bin/false -m -d /usr/share/ollama ollama",
     )
@@ -33,20 +34,8 @@ app = modal.App(name="ollama", image=image)
 with image.imports():
     import ollama
 
-@app.cls(gpu="a10g", region="us-east", container_idle_timeout=300)
+@app.cls(gpu="a10g", container_idle_timeout=300)
 class Ollama:
-    @build()
-    def pull(self):
-        # TODO(irfansharif): Was hoping that the following would use an image
-        # with this explicit @build() step's results, but alas, it doesn't - so
-        # we're baking it directly into the base image above. Also, would be
-        # nice to simply specify the class name? Not like the method is
-        # specified has any relevance.
-        #
-        #  $ modal shell ollama-modal.py::Ollama.infer
-
-        # pull(model=MODEL)
-        ...
 
     @enter()
     def load(self):
